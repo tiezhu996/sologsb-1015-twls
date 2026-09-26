@@ -72,9 +72,21 @@ export interface PoemIssue {
   position?: number;
 }
 
+export type DiffType = 'same' | 'insert' | 'delete' | 'replace';
+
 export interface CharDiff {
   index: number;
   left: string;
   right: string;
   changed: boolean;
+  /** insert＝当前稿多字，delete＝当前稿少字，replace＝两本用字不同 */
+  type: DiffType;
+  /** 所属差异段编号，-1 表示无差异 */
+  hunk: number;
+}
+
+export interface DiffHunk {
+  hunk: number;
+  startIndex: number;
+  endIndex: number;
 }

@@ -1,10 +1,11 @@
-import { computed, Injectable, signal } from '@angular/core';
+import { computed, effect, Injectable, signal } from '@angular/core';
 import type {
   AntithesisPair,
   AnalysisCell,
   AnalysisLine,
   CharacterMark,
   CharDiff,
+  DiffHunk,
   MarkTone,
   MeterTemplate,
   PoemIssue,
@@ -12,6 +13,7 @@ import type {
   PoemWorkspace,
   Tone,
 } from '../models/poem.models';
+import { alignTexts, collectHunks } from './text-align';
 
 export const METER_TEMPLATES: MeterTemplate[] = [
   {
@@ -239,19 +241,35 @@ export class PoetryStoreService {
     const left = this.workspace().versions.find((version) => version.id === this.baselineVersionId());
     const right = this.activeVersion();
     if (!left || left.id === right.id) return [];
-    const leftChars = Array.from(left.text.replace(/\n/g, ''));
-    const rightChars = Array.from(right.text.replace(/\n/g, ''));
-    const size = Math.max(leftChars.length, rightChars.length);
-    return Array.from({ length: size }, (_, index) => ({
-      index,
-      left: leftChars[index] ?? '',
-      right: rightChars[index] ?? '',
-      changed: leftChars[index] !== rightChars[index],
-    }));
+    return alignTexts(left.text, right.text);
   });
 
-  readonly differences = computed(() => this.diff().filter((item) => item.changed).map((item) => item.index));
+  /** 真实差异段：一处连续增删换只算一处 */
+  readonly differences = computed<DiffHunk[]>(() => collectHunks(this.diff()));
+
   readonly baselineVersion = computed(() => this.workspace().versions.find((version) => version.id === this.baselineVersionId()));
+
+  /** 当前定位到的差异段编号，无差异时为 -1 */
+  readonly currentHunk = computed(() => {
+    const hunks = this.differences();
+    if (!hunks.length) return -1;
+    const index = Math.min(this.currentDiffIndex(), hunks.length - 1);
+    return hunks[index].hunk;
+  });
+
+  /** 比较双方与正文内容的指纹，变化时定位从头开始 */
+  private readonly diffFingerprint = computed(() => {
+    const left = this.baselineVersion();
+    const right = this.activeVersion();
+    return [left?.id ?? '', right.id, left?.text ?? '', right.text].join('\u0001');
+  });
+
+  constructor() {
+    effect(() => {
+      this.diffFingerprint();
+      this.currentDiffIndex.set(0);
+    });
+  }
 
   selectVersion(id: string): void {
     this.workspace.update((workspace) => ({ ...workspace, activeVersionId: id }));
@@ -354,18 +372,22 @@ export class PoetryStoreService {
   }
 
   nextDifference(): void {
-    const values = this.differences();
-    if (!values.length) return;
-    const current = values.findIndex((index) => index >= this.currentDiffIndex());
-    this.currentDiffIndex.set(values[(current + 1) % values.length]);
+    const total = this.differences().length;
+    if (!total) return;
+    this.currentDiffIndex.update((index) => (index + 1) % total);
   }
 
   previousDifference(): void {
-    const values = this.differences();
-    if (!values.length) return;
-    const reverse = [...values].reverse();
-    const current = reverse.findIndex((index) => index <= this.currentDiffIndex());
-    this.currentDiffIndex.set(reverse[(current + 1) % reverse.length]);
+    const total = this.differences().length;
+    if (!total) return;
+    this.currentDiffIndex.update((index) => (index - 1 + total) % total);
+  }
+
+  /** 点击某个字格时，把定位切到它所属的差异段 */
+  focusHunk(hunk: number): void {
+    if (hunk < 0) return;
+    const index = this.differences().findIndex((item) => item.hunk === hunk);
+    if (index >= 0) this.currentDiffIndex.set(index);
   }
 
   undo(): void {

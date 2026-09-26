@@ -216,21 +216,41 @@ kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place
   background: #fffefa;
 }
 .diff-char {
+  position: relative;
   width: 46px;
   display: grid;
   grid-template-columns: 1fr;
+  padding: 0;
   text-align: center;
+  border: 0;
   border-radius: 6px;
   background: #f4f2ec;
   overflow: hidden;
+  cursor: default;
 }
+.diff-char.is-changed { cursor: pointer; }
 .diff-char i, .diff-char b { padding: 3px 2px; font: 17px/1.5 "Songti SC", serif; font-style: normal; }
 .diff-char i { color: #756f64; border-bottom: 1px solid #e2ddd3; }
 .diff-char b { color: #263e35; }
-.diff-char.is-changed { background: #fff0ed; box-shadow: inset 0 0 0 1px #ddb2ac; }
+.diff-char.is-replace { background: #fff0ed; box-shadow: inset 0 0 0 1px #ddb2ac; }
+.diff-char.is-insert { background: #ecf6ef; box-shadow: inset 0 0 0 1px #a9cfb8; }
+.diff-char.is-delete { background: #fbf3e0; box-shadow: inset 0 0 0 1px #dec68f; }
 .diff-char.is-current { box-shadow: 0 0 0 2px #a23e36, 0 3px 10px rgba(126,48,42,.2); }
 .diff-char.has-left i { color: #b5afa5; }
 .diff-char.has-right b { color: #aaa49a; }
+.diff-char em {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  padding: 0 3px;
+  border-radius: 4px;
+  color: #fff;
+  background: #b05a50;
+  font: 700 8px/14px "Songti SC", serif;
+  font-style: normal;
+}
+.diff-char.is-insert em { background: #4b8b6a; }
+.diff-char.is-delete em { background: #b3872f; }
 .compare-note { margin-top: 14px; }
 
 .version-layout { display: grid; grid-template-columns: 1fr 330px; gap: 12px; align-items: start; }
