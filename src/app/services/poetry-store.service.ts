@@ -1,10 +1,11 @@
-import { computed, Injectable, signal } from '@angular/core';
+import { computed, effect, Injectable, signal } from '@angular/core';
 import type {
   AntithesisPair,
   AnalysisCell,
   AnalysisLine,
   CharacterMark,
   CharDiff,
+  DiffKind,
   MarkTone,
   MeterTemplate,
   PoemIssue,
@@ -72,6 +73,69 @@ function defaultMark(): CharacterMark {
   return { tone: '?', rhyme: '', pauseAfter: false, basis: '', note: '' };
 }
 
+// 基于最长公共子序列把两版正文对齐：相同字直接配对，多出的字记为增/缺，
+// 连续的一段“删+增”按位置配成换字，一处增删不再牵连后面的字。
+function alignCharDiff(left: string[], right: string[]): CharDiff[] {
+  const rows = left.length;
+  const cols = right.length;
+  const lcs: number[][] = Array.from({ length: rows + 1 }, () => new Array<number>(cols + 1).fill(0));
+  for (let i = rows - 1; i >= 0; i -= 1) {
+    for (let j = cols - 1; j >= 0; j -= 1) {
+      lcs[i][j] = left[i] === right[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const slots: CharDiff[] = [];
+  const push = (kind: DiffKind, leftChar: string, rightChar: string) => {
+    slots.push({ index: slots.length, left: leftChar, right: rightChar, changed: kind !== 'same', kind });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < rows && j < cols) {
+    if (left[i] === right[j]) {
+      push('same', left[i], right[j]);
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      push('delete', left[i], '');
+      i += 1;
+    } else {
+      push('insert', '', right[j]);
+      j += 1;
+    }
+  }
+  while (i < rows) {
+    push('delete', left[i], '');
+    i += 1;
+  }
+  while (j < cols) {
+    push('insert', '', right[j]);
+    j += 1;
+  }
+
+  const merged: CharDiff[] = [];
+  let cursor = 0;
+  while (cursor < slots.length) {
+    if (slots[cursor].kind === 'same') {
+      merged.push({ ...slots[cursor], index: merged.length });
+      cursor += 1;
+      continue;
+    }
+    const deletes: CharDiff[] = [];
+    const inserts: CharDiff[] = [];
+    while (cursor < slots.length && slots[cursor].kind !== 'same') {
+      (slots[cursor].kind === 'delete' ? deletes : inserts).push(slots[cursor]);
+      cursor += 1;
+    }
+    const pairs = Math.min(deletes.length, inserts.length);
+    for (let p = 0; p < pairs; p += 1) {
+      merged.push({ index: merged.length, left: deletes[p].left, right: inserts[p].right, changed: true, kind: 'substitute' });
+    }
+    for (let p = pairs; p < deletes.length; p += 1) merged.push({ ...deletes[p], index: merged.length });
+    for (let p = pairs; p < inserts.length; p += 1) merged.push({ ...inserts[p], index: merged.length });
+  }
+  return merged;
+}
+
 function initialWorkspace(): PoemWorkspace {
   const now = new Date().toISOString();
   const spring = '春眠不觉晓，\n处处闻啼鸟。\n夜来风雨声，\n花落知多少。';
@@ -132,13 +196,27 @@ export class PoetryStoreService {
   readonly selectedLine = signal(0);
   readonly selectedPosition = signal(4);
   readonly baselineVersionId = signal<string>('');
-  readonly currentDiffIndex = signal(0);
+  readonly currentDiffIndex = signal(-1);
   readonly toast = signal('');
   readonly undoCount = signal(0);
   readonly redoCount = signal(0);
 
   private undoStack: PoemWorkspace[] = [];
   private redoStack: PoemWorkspace[] = [];
+  private diffFingerprint = '';
+
+  constructor() {
+    // 底本或任一版本正文变化后，差异定位游标回到起点，下一次定位从第一处开始
+    effect(() => {
+      const baseline = this.baselineVersion();
+      const active = this.activeVersion();
+      const fingerprint = JSON.stringify([this.baselineVersionId(), baseline?.text ?? '', active.id, active.text]);
+      if (fingerprint !== this.diffFingerprint) {
+        this.diffFingerprint = fingerprint;
+        this.currentDiffIndex.set(-1);
+      }
+    });
+  }
 
   readonly activeVersion = computed(() => {
     const state = this.workspace();
@@ -241,16 +319,14 @@ export class PoetryStoreService {
     if (!left || left.id === right.id) return [];
     const leftChars = Array.from(left.text.replace(/\n/g, ''));
     const rightChars = Array.from(right.text.replace(/\n/g, ''));
-    const size = Math.max(leftChars.length, rightChars.length);
-    return Array.from({ length: size }, (_, index) => ({
-      index,
-      left: leftChars[index] ?? '',
-      right: rightChars[index] ?? '',
-      changed: leftChars[index] !== rightChars[index],
-    }));
+    return alignCharDiff(leftChars, rightChars);
   });
 
   readonly differences = computed(() => this.diff().filter((item) => item.changed).map((item) => item.index));
+  readonly currentDiffPosition = computed(() => {
+    const position = this.differences().indexOf(this.currentDiffIndex());
+    return position < 0 ? 0 : position + 1;
+  });
   readonly baselineVersion = computed(() => this.workspace().versions.find((version) => version.id === this.baselineVersionId()));
 
   selectVersion(id: string): void {
@@ -355,17 +431,22 @@ export class PoetryStoreService {
 
   nextDifference(): void {
     const values = this.differences();
-    if (!values.length) return;
-    const current = values.findIndex((index) => index >= this.currentDiffIndex());
-    this.currentDiffIndex.set(values[(current + 1) % values.length]);
+    if (!values.length) {
+      this.currentDiffIndex.set(-1);
+      return;
+    }
+    const next = values.find((index) => index > this.currentDiffIndex());
+    this.currentDiffIndex.set(next ?? values[0]);
   }
 
   previousDifference(): void {
     const values = this.differences();
-    if (!values.length) return;
-    const reverse = [...values].reverse();
-    const current = reverse.findIndex((index) => index <= this.currentDiffIndex());
-    this.currentDiffIndex.set(reverse[(current + 1) % reverse.length]);
+    if (!values.length) {
+      this.currentDiffIndex.set(-1);
+      return;
+    }
+    const before = values.filter((index) => index < this.currentDiffIndex());
+    this.currentDiffIndex.set(before.length ? before[before.length - 1] : values[values.length - 1]);
   }
 
   undo(): void {

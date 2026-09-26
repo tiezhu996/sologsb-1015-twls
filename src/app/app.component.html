@@ -250,9 +250,12 @@
               <nz-option [nzValue]="version.id" [nzLabel]="version.name"></nz-option>
             }
           </nz-select>
-          <button nz-button (click)="store.previousDifference()">上一处异文</button>
-          <button nz-button nzType="primary" (click)="store.nextDifference()">下一处异文</button>
+          <button nz-button [disabled]="store.differences().length === 0" (click)="store.previousDifference()">上一处异文</button>
+          <button nz-button nzType="primary" [disabled]="store.differences().length === 0" (click)="store.nextDifference()">下一处异文</button>
           <nz-tag nzColor="error">{{ store.differences().length }} 处差异</nz-tag>
+          @if (store.currentDiffPosition() > 0) {
+            <nz-tag nzColor="processing">定位第 {{ store.currentDiffPosition() }} 处</nz-tag>
+          }
         </div>
         @if (store.baselineVersion(); as baseline) {
           <div class="compare-headings">
@@ -265,16 +268,29 @@
                 class="diff-char"
                 [class.is-changed]="item.changed"
                 [class.is-current]="item.index === store.currentDiffIndex()"
+                [class.is-insert]="item.kind === 'insert'"
+                [class.is-delete]="item.kind === 'delete'"
+                [class.is-substitute]="item.kind === 'substitute'"
                 [class.has-left]="!item.left"
                 [class.has-right]="!item.right"
+                nz-tooltip
+                [nzTooltipTitle]="diffKindLabel(item.kind)"
               >
                 <i>{{ item.left || '□' }}</i>
                 <b>{{ item.right || '□' }}</b>
+                @if (item.kind !== 'same') {
+                  <em class="diff-kind">{{ item.kind === 'insert' ? '多' : item.kind === 'delete' ? '少' : '换' }}</em>
+                }
               </span>
             }
           </div>
           <div class="compare-note">
-            <nz-alert nzType="info" nzShowIcon nzMessage="比较采用字符位置对齐" nzDescription="上方为上／底本字符，下方为当前版本。点击“下一处异文”可逐项定位。"></nz-alert>
+            <nz-alert
+              nzType="info"
+              nzShowIcon
+              nzMessage="比较按文本自动对齐"
+              nzDescription="上方为底本字符，下方为当前版本；多字、少字、换字分别标注，一处增删只影响本段，不牵连后文。点击“下一处异文”在真实差异间循环定位。"
+            ></nz-alert>
           </div>
         } @else {
           <nz-empty nzNotFoundContent="请选择一份异文底本"></nz-empty>

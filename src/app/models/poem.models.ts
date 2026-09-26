@@ -72,9 +72,12 @@ export interface PoemIssue {
   position?: number;
 }
 
+export type DiffKind = 'same' | 'insert' | 'delete' | 'substitute';
+
 export interface CharDiff {
   index: number;
   left: string;
   right: string;
   changed: boolean;
+  kind: DiffKind;
 }

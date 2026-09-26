@@ -14,6 +14,7 @@ import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { METER_TEMPLATES, PoetryStoreService } from './services/poetry-store.service';
+import type { DiffKind } from './models/poem.models';
 
 @Component({
   selector: 'app-root',
@@ -66,6 +67,19 @@ export class AppComponent {
 
   updateVersionSource(source: string): void {
     this.store.updateVersionSource(source);
+  }
+
+  diffKindLabel(kind: DiffKind): string {
+    switch (kind) {
+      case 'insert':
+        return '当前版本多出的字';
+      case 'delete':
+        return '底本有此字，当前版本缺少';
+      case 'substitute':
+        return '两版用字不同';
+      default:
+        return '';
+    }
   }
 
   trackTemplate(index: number, item: (typeof METER_TEMPLATES)[number]): string {

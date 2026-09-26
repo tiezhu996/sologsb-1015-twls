@@ -216,6 +216,7 @@ kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place
   background: #fffefa;
 }
 .diff-char {
+  position: relative;
   width: 46px;
   display: grid;
   grid-template-columns: 1fr;
@@ -228,9 +229,26 @@ kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place
 .diff-char i { color: #756f64; border-bottom: 1px solid #e2ddd3; }
 .diff-char b { color: #263e35; }
 .diff-char.is-changed { background: #fff0ed; box-shadow: inset 0 0 0 1px #ddb2ac; }
+.diff-char.is-insert { background: #e9f5ee; box-shadow: inset 0 0 0 1px #a9cfba; }
+.diff-char.is-delete { background: #fbf3e3; box-shadow: inset 0 0 0 1px #dec38d; }
+.diff-char.is-substitute { background: #fff0ed; box-shadow: inset 0 0 0 1px #ddb2ac; }
 .diff-char.is-current { box-shadow: 0 0 0 2px #a23e36, 0 3px 10px rgba(126,48,42,.2); }
 .diff-char.has-left i { color: #b5afa5; }
 .diff-char.has-right b { color: #aaa49a; }
+.diff-kind {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0 3px;
+  border-radius: 0 0 0 5px;
+  color: #fff;
+  font-size: 8px;
+  font-style: normal;
+  line-height: 1.7;
+}
+.diff-char.is-insert .diff-kind { background: #3f7c5b; }
+.diff-char.is-delete .diff-kind { background: #b07f2e; }
+.diff-char.is-substitute .diff-kind { background: #b0544c; }
 .compare-note { margin-top: 14px; }
 
 .version-layout { display: grid; grid-template-columns: 1fr 330px; gap: 12px; align-items: start; }
